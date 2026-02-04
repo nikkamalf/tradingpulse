@@ -1,4 +1,4 @@
-iname: Gold Tracker Hourly Update
+name: Gold Tracker Hourly Update
 
 on:
   schedule:
