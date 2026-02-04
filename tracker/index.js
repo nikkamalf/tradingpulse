@@ -176,8 +176,8 @@ async function run() {
                 console.log(`Generating a new ${signal} signal!`);
                 await sendEmail(
                     `${signal} Signal Alert: ${CONFIG.ticker}`,
-                    `Ichimoku ${signal} signal detected for ${CONFIG.ticker}.\n\n` +
-                    `Price: $${price.toFixed(2)}\nTenkan: ${tenkan.toFixed(2)}\nKijun: ${kijun.toFixed(2)}`
+                    `${signal} signal detected for ${CONFIG.ticker}.\n\n` +
+                    `Price: $${price.toFixed(2)}\nTenkan: $${tenkan.toFixed(2)}\nKijun: $${kijun.toFixed(2)}`
                 );
             } else {
                 console.log(`Signal ${signal} already alerted for this date.`);
