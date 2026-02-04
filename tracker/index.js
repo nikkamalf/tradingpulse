@@ -1,4 +1,3 @@
-// Set this for environments with corporate proxy SSL interception (e.g., Netskope)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const nodemailer = require('nodemailer');
@@ -204,7 +203,7 @@ async function run() {
             }))
         };
 
-        // Ensure the website directory exists (fixes the error you likely saw)
+        // Ensure the website directory exists
         const dir = path.dirname(CONFIG.websiteDataPath);
         if (!fs.existsSync(dir)) {
             console.log(`Creating missing directory: ${dir}`);
@@ -216,7 +215,7 @@ async function run() {
 
     } catch (error) {
         console.error('Error in Gold Tracker execution:', error.message);
-        process.exit(1); // Explicitly fail so GitHub Actions catch it
+        process.exit(1);
     }
 }
 
