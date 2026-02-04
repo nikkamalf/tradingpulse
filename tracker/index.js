@@ -22,10 +22,8 @@ const CONFIG = {
 
 /**
  * Fetches historical data from Stooq CSV API.
- * Stooq is more stable than Yahoo Finance in many environments.
  */
 async function fetchHistoricalData(ticker) {
-    // GLD corresponds to gld.us on Stooq
     const symbol = ticker.toLowerCase() === 'gld' ? 'gld.us' : ticker.toLowerCase();
     const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d`;
 
@@ -36,8 +34,6 @@ async function fetchHistoricalData(ticker) {
     const csv = await response.text();
     const lines = csv.trim().split('\n');
 
-    // Header: Date,Open,High,Low,Close,Volume
-    // Data starts from index 1. We need at least 78 days for Ichimoku.
     return lines.slice(1).map(line => {
         const [date, open, high, low, close, volume] = line.split(',');
         return {
@@ -63,34 +59,26 @@ function calculateIchimoku(data) {
         return { high, low };
     };
 
-    // Latest index is at the end of the array (Stooq historical data is chronological)
-
-    // Tenkan-sen (9 periods)
     const tenkanSlice = data.slice(-9);
     const tenkanHL = getPeriodHighLow(tenkanSlice);
     const tenkan = (tenkanHL.high + tenkanHL.low) / 2;
 
-    // Kijun-sen (26 periods)
     const kijunSlice = data.slice(-26);
     const kijunHL = getPeriodHighLow(kijunSlice);
     const kijun = (kijunHL.high + kijunHL.low) / 2;
 
-    // Senkou Span A (plotted 26 ahead)
-    // We calculate it as the average of Tenkan and Kijun from 26 periods ago
     const t26_slice = data.slice(-26 - 9, -26);
     const k26_slice = data.slice(-26 - 26, -26);
     if (t26_slice.length < 9 || k26_slice.length < 26) {
-        throw new Error('Not enough data to calculate Senkou Span A (need at least 52 periods)');
+        throw new Error('Not enough data to calculate Senkou Span A');
     }
     const tenkan26 = (getPeriodHighLow(t26_slice).high + getPeriodHighLow(t26_slice).low) / 2;
     const kijun26 = (getPeriodHighLow(k26_slice).high + getPeriodHighLow(k26_slice).low) / 2;
     const senkouA = (tenkan26 + kijun26) / 2;
 
-    // Senkou Span B (52 periods, plotted 26 ahead)
-    // We calculate it as the long-term HL midpoint from 52 periods ago, shifted 26 back
     const b52Slice = data.slice(-52 - 26, -26);
     if (b52Slice.length < 52) {
-        throw new Error('Not enough data to calculate Senkou Span B (need at least 78 periods)');
+        throw new Error('Not enough data to calculate Senkou Span B');
     }
     const b52HL = getPeriodHighLow(b52Slice);
     const senkouB = (b52HL.high + b52HL.low) / 2;
@@ -113,11 +101,6 @@ function calculateIchimoku(data) {
 async function sendEmail(subject, body) {
     if (!CONFIG.user || !CONFIG.pass) {
         console.warn('SMTP credentials missing. Skipping email notification.');
-        console.log('--- EMAIL MOCK ---');
-        console.log(`To: ${CONFIG.recipient}`);
-        console.log(`Subject: ${subject}`);
-        console.log(`Body: ${body}`);
-        console.log('------------------');
         return;
     }
 
@@ -146,7 +129,7 @@ async function sendEmail(subject, body) {
 }
 
 /**
- * Prevents duplicate alerts for the same signal on the same day.
+ * Prevents duplicate alerts.
  */
 function checkAlertHistory(signal, date) {
     if (!fs.existsSync(CONFIG.historyPath)) {
@@ -168,7 +151,6 @@ async function run() {
         console.log(`Checking ${CONFIG.ticker} for Ichimoku signals...`);
         const data = await fetchHistoricalData(CONFIG.ticker);
 
-        // We need at least 78 data points for Senkou Span B (52 length + 26 plot ahead)
         if (data.length < 78) {
             console.log(`Not enough historical data yet (${data.length}/78 days).`);
             return;
@@ -180,13 +162,9 @@ async function run() {
         console.log(`Latest data date: ${date.split('T')[0]}`);
         console.log(`Current Price: $${price.toFixed(2)}`);
         console.log(`Tenkan: ${tenkan.toFixed(2)} | Kijun: ${kijun.toFixed(2)}`);
-        console.log(`Cloud: Span A=${senkouA.toFixed(2)} | Span B=${senkouB.toFixed(2)}`);
 
         let signal = '';
 
-        // Ichimoku Logic (Daily Timeframe):
-        // BUY: Tenkan > Kijun AND Price > Cloud
-        // SELL: Tenkan < Kijun AND Price < Cloud
         if (tenkan > kijun && price > Math.max(senkouA, senkouB)) {
             signal = 'BUY';
         } else if (tenkan < kijun && price < Math.min(senkouA, senkouB)) {
@@ -198,23 +176,17 @@ async function run() {
                 console.log(`Generating a new ${signal} signal!`);
                 await sendEmail(
                     `${signal} Signal Alert: ${CONFIG.ticker}`,
-                    `Ichimoku ${signal} signal detected for ${CONFIG.ticker} on the daily timeframe.\n\n` +
-                    `Metrics:\n` +
-                    `- Price: $${price.toFixed(2)}\n` +
-                    `- Tenkan-Sen: ${tenkan.toFixed(2)}\n` +
-                    `- Kijun-Sen: ${kijun.toFixed(2)}\n` +
-                    `- Senkou Span A: ${senkouA.toFixed(2)}\n` +
-                    `- Senkou Span B: ${senkouB.toFixed(2)}\n\n` +
-                    `Status: Active`
+                    `Ichimoku ${signal} signal detected for ${CONFIG.ticker}.\n\n` +
+                    `Price: $${price.toFixed(2)}\nTenkan: ${tenkan.toFixed(2)}\nKijun: ${kijun.toFixed(2)}`
                 );
             } else {
-                console.log(`Signal ${signal} was already alerted for this date.`);
+                console.log(`Signal ${signal} already alerted for this date.`);
             }
         } else {
-            console.log('No signal detected based on current Ichimoku parameters.');
+            console.log('No signal detected based on current parameters.');
         }
 
-        // Save data for the website
+        // Prepare data for website
         const websiteData = {
             ticker: CONFIG.ticker,
             price: price,
@@ -231,11 +203,20 @@ async function run() {
                 price: d.close
             }))
         };
+
+        // Ensure the website directory exists (fixes the error you likely saw)
+        const dir = path.dirname(CONFIG.websiteDataPath);
+        if (!fs.existsSync(dir)) {
+            console.log(`Creating missing directory: ${dir}`);
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
         fs.writeFileSync(CONFIG.websiteDataPath, JSON.stringify(websiteData, null, 2));
         console.log(`Updated website data at ${CONFIG.websiteDataPath}`);
 
     } catch (error) {
         console.error('Error in Gold Tracker execution:', error.message);
+        process.exit(1); // Explicitly fail so GitHub Actions catch it
     }
 }
 
