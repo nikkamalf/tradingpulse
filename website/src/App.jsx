@@ -9,7 +9,7 @@ const Candlestick = (props) => {
   const { x, y, width, height, low, high, open, close } = props;
   const isUp = close > open;
   const color = isUp ? '#00ff88' : '#ff4d4d';
-
+  
   if (high === low) return null;
 
   return (
@@ -77,20 +77,20 @@ function App() {
     const mockData = [];
     let basePrice = 250;
     for (let i = 0; i < 40; i++) {
-      const o = basePrice + (Math.random() - 0.5) * 5;
-      const c = o + (Math.random() - 0.5) * 8;
-      const h = Math.max(o, c) + Math.random() * 3;
-      const l = Math.min(o, c) - Math.random() * 3;
-      basePrice = c;
+        const o = basePrice + (Math.random() - 0.5) * 5;
+        const c = o + (Math.random() - 0.5) * 8;
+        const h = Math.max(o, c) + Math.random() * 3;
+        const l = Math.min(o, c) - Math.random() * 3;
+        basePrice = c;
 
-      mockData.push({
-        date: new Date(Date.now() - (40 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        open: parseFloat(o.toFixed(2)),
-        close: parseFloat(c.toFixed(2)),
-        high: parseFloat(h.toFixed(2)),
-        low: parseFloat(l.toFixed(2)),
-        price: parseFloat(c.toFixed(2))
-      });
+        mockData.push({
+            date: new Date(Date.now() - (40 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            open: parseFloat(o.toFixed(2)),
+            close: parseFloat(c.toFixed(2)),
+            high: parseFloat(h.toFixed(2)),
+            low: parseFloat(l.toFixed(2)),
+            price: parseFloat(c.toFixed(2))
+        });
     }
     setData(mockData);
     setCurrentPrice(mockData[mockData.length - 1].close);
@@ -141,7 +141,7 @@ function App() {
             <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={10} tickLine={false} axisLine={false} minTickGap={20} />
             <YAxis stroke="var(--text-secondary)" fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} tickFormatter={(v) => `$${v}`} />
             <Tooltip contentStyle={{ background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
-
+            
             {/* Candlesticks */}
             <Scatter data={data} shape={<Candlestick />} />
 
