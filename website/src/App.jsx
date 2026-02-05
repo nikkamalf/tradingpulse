@@ -1,111 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Bar, Cell, Customized } from 'recharts';
-import { Activity, ShieldCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from 'recharts';
+import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
 
-// Helper to format values safely
 const formatVal = (val) => {
   if (val === undefined || val === null || isNaN(val)) return '0.00';
   return Number(val).toFixed(2);
 };
 
-// Custom Ichimoku Cloud renderer
+// Ichimoku Cloud - fills between spanA and spanB
 const IchimokuCloud = ({ data, xAxisMap, yAxisMap }) => {
   if (!data || !xAxisMap || !yAxisMap) return null;
-
   const xScale = xAxisMap['date']?.scale;
   const yScale = yAxisMap['price']?.scale;
   if (!xScale || !yScale) return null;
 
-  // Create path for cloud fill
-  let pathData = '';
   const validData = data.filter(d => d.spanA != null && d.spanB != null);
-
   if (validData.length < 2) return null;
 
-  // Start from first point at spanA
-  pathData = `M ${xScale(validData[0].date)} ${yScale(validData[0].spanA)}`;
-
-  // Draw line along spanA
+  let pathData = `M ${xScale(validData[0].date)} ${yScale(validData[0].spanA)}`;
   for (let i = 1; i < validData.length; i++) {
     pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanA)}`;
   }
-
-  // Draw line back along spanB in reverse
   for (let i = validData.length - 1; i >= 0; i--) {
     pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanB)}`;
   }
+  pathData += ' Z';
 
-  pathData += ' Z'; // Close the path
-
-  return (
-    <path
-      d={pathData}
-      fill="#00ff88"
-      fillOpacity={0.12}
-      stroke="none"
-    />
-  );
+  return <path d={pathData} fill="#00ff88" fillOpacity={0.12} stroke="none" />;
 };
 
-// Custom Candlestick shape for Bar chart
-const CandlestickShape = (props) => {
-  const { x, y, width, height, payload } = props;
-  if (!payload || !payload.open || !payload.close) return null;
-
-  // This won't work as expected because Bar doesn't give us the right coordinates
-  // We need a different approach
-  return null;
-};
-
-// Custom Candlestick renderer
-const CandlestickRenderer = ({ data, xAxisMap, yAxisMap, width }) => {
+// Candlesticks renderer
+const Candlesticks = ({ data, xAxisMap, yAxisMap, width }) => {
   if (!data || !xAxisMap || !yAxisMap) return null;
-
   const xScale = xAxisMap['date']?.scale;
   const yScale = yAxisMap['price']?.scale;
   if (!xScale || !yScale) return null;
 
   const validData = data.filter(d => d.open && d.close && d.high && d.low);
-  const barWidth = Math.max(3, Math.min(12, (width / validData.length) * 0.6));
+  const barWidth = Math.max(4, Math.min(12, (width / validData.length) * 0.7));
 
   return (
-    <g className="candlesticks">
-      {validData.map((item, index) => {
+    <g>
+      {validData.map((item, idx) => {
         const x = xScale(item.date);
-        const yHigh = yScale(item.high);
-        const yLow = yScale(item.low);
-        const yOpen = yScale(item.open);
-        const yClose = yScale(item.close);
-
-        const isUp = item.close >= item.open;
-        const color = isUp ? '#00ff88' : '#ff4d4d';
-
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+        const yH = yScale(item.high);
+        const yL = yScale(item.low);
+        const yO = yScale(item.open);
+        const yC = yScale(item.close);
+        const up = item.close >= item.open;
+        const color = up ? '#00ff88' : '#ff4d4d';
+        const bodyTop = Math.min(yO, yC);
+        const bodyH = Math.max(1, Math.abs(yC - yO));
 
         return (
-          <g key={`candle-${index}-${item.date}`}>
-            {/* Wick */}
-            <line
-              x1={x}
-              y1={yHigh}
-              x2={x}
-              y2={yLow}
-              stroke={color}
-              strokeWidth={1}
-            />
-            {/* Body */}
-            <rect
-              x={x - barWidth / 2}
-              y={bodyTop}
-              width={barWidth}
-              height={bodyHeight}
-              fill={color}
-              stroke={color}
-              strokeWidth={1}
-            />
+          <g key={`c-${idx}`}>
+            <line x1={x} y1={yH} x2={x} y2={yL} stroke={color} strokeWidth={1} />
+            <rect x={x - barWidth / 2} y={bodyTop} width={barWidth} height={bodyH} fill={color} />
           </g>
         );
       })}
@@ -113,25 +65,18 @@ const CandlestickRenderer = ({ data, xAxisMap, yAxisMap, width }) => {
   );
 };
 
-// Clean tooltip
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length > 0) {
-    const data = payload[0].payload;
+    const d = payload[0].payload;
     return (
-      <div style={{
-        background: 'rgba(10, 10, 12, 0.95)',
-        border: '1px solid rgba(255,255,255,0.2)',
-        padding: '1rem',
-        borderRadius: '10px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
-      }}>
-        <p style={{ color: '#d4af37', fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.85rem' }}>{data.date}</p>
+      <div style={{ background: 'rgba(10,10,12,0.95)', border: '1px solid rgba(255,255,255,0.2)', padding: '1rem', borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.8)' }}>
+        <p style={{ color: '#d4af37', fontWeight: 'bold', marginBottom: '0.5rem', fontSize: '0.85rem' }}>{d.date}</p>
         <div style={{ fontSize: '0.75rem', lineHeight: '1.6' }}>
-          <p style={{ color: '#fff' }}>O: ${formatVal(data.open)} | C: ${formatVal(data.close)}</p>
-          <p style={{ color: '#00ff88' }}>H: ${formatVal(data.high)} | <span style={{ color: '#ff4d4d' }}>L: ${formatVal(data.low)}</span></p>
+          <p style={{ color: '#fff' }}>O: ${formatVal(d.open)} | C: ${formatVal(d.close)}</p>
+          <p style={{ color: '#00ff88' }}>H: ${formatVal(d.high)} | <span style={{ color: '#ff4d4d' }}>L: ${formatVal(d.low)}</span></p>
           <hr style={{ margin: '0.5rem 0', border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)' }} />
-          <p style={{ color: '#40E0D0' }}>Tenkan: ${formatVal(data.tenkan)}</p>
-          <p style={{ color: '#DC143C' }}>Kijun: ${formatVal(data.kijun)}</p>
+          <p style={{ color: '#40E0D0' }}>Tenkan: ${formatVal(d.tenkan)}</p>
+          <p style={{ color: '#DC143C' }}>Kijun: ${formatVal(d.kijun)}</p>
         </div>
       </div>
     );
@@ -157,14 +102,8 @@ function App() {
       if (!response.ok) throw new Error('Data unavailable');
       const jsonData = await response.json();
 
-      // Process history data
       const history = (jsonData.history || []).map(day => {
-        const signal = (jsonData.signalHistory || []).find(s => {
-          const sDate = s.date?.split('T')[0];
-          const dDate = day.date?.split('T')[0];
-          return sDate === dDate;
-        });
-
+        const signal = (jsonData.signalHistory || []).find(s => s.date?.split('T')[0] === day.date?.split('T')[0]);
         return {
           date: day.date?.split('T')[0] || day.date,
           open: day.open,
@@ -236,79 +175,32 @@ function App() {
           <ResponsiveContainer width="100%" height={450}>
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis
-                dataKey="date"
-                stroke="rgba(255,255,255,0.3)"
-                fontSize={9}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-                minTickGap={50}
-              />
-              <YAxis
-                yAxisId="price"
-                stroke="rgba(255,255,255,0.3)"
-                fontSize={10}
-                axisLine={false}
-                tickLine={false}
-                domain={['auto', 'auto']}
-                tickFormatter={v => `$${Math.round(v)}`}
-              />
+              <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={9} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={50} />
+              <YAxis yAxisId="price" stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Render Ichimoku Cloud first (background layer) */}
+              {/* Cloud between spanA and spanB */}
               <Customized component={(props) => <IchimokuCloud {...props} data={data} />} />
 
-              {/* Ichimoku Lines */}
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="tenkan"
-                stroke="#40E0D0"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="kijun"
-                stroke="#DC143C"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="spanA"
-                stroke="#2E8B57"
-                strokeWidth={1}
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="spanB"
-                stroke="#8B4513"
-                strokeWidth={1}
-                dot={false}
-                isAnimationActive={false}
-              />
+              {/* Ichimoku indicator lines */}
+              <Line yAxisId="price" type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
 
-              {/* Render candlesticks on top */}
-              <Customized component={(props) => <CandlestickRenderer {...props} data={data} />} />
+              {/* Candlesticks on top */}
+              <Customized component={(props) => <Candlesticks {...props} data={data} />} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      <footer style={{ marginTop: '2rem', textAlign: 'center', opacity: 0.25, fontSize: '0.65rem' }}>
-        <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
-      </footer>
-    </div>
-  );
+      <footer style={{
+        marginTop: '2rem', textAlign: 'center', opacity: 0.25', fontSize: '0.65rem' }}>
+          <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
+            </footer >
+        </div >
+    );
 }
 
 export default App;
