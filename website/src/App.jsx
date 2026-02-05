@@ -161,7 +161,7 @@ function App() {
       </div>
 
       <footer style={{ marginTop: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.6 }}>
-        <p>Buy: Tenkan > Kijun & Price > Cloud | Sell: Tenkan < Kijun & Price < Cloud</p>
+        <p>Buy: Tenkan &gt; Kijun &amp; Price &gt; Cloud | Sell: Tenkan &lt; Kijun &amp; Price &lt; Cloud</p>
       </footer>
     </div>
   );
