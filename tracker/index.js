@@ -1,4 +1,3 @@
-// Set this for environments with corporate proxy SSL interception (e.g., Netskope)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const nodemailer = require('nodemailer');
@@ -47,53 +46,36 @@ async function fetchHistoricalData(ticker) {
 }
 
 /**
- * Calculates Ichimoku Cloud components.
+ * Calculates Ichimoku Cloud components for a specific index in the data array.
  */
-function calculateIchimoku(data) {
-    const getPeriodHighLow = (slice) => {
-        let high = -Infinity;
-        let low = Infinity;
+function getIchimokuAt(data, index) {
+    if (index < 52 + 25) return null; // Not enough lead-up data
+
+    const getHL = (slice) => {
+        let h = -Infinity, l = Infinity;
         for (const d of slice) {
-            if (d.high > high) high = d.high;
-            if (d.low < low) low = d.low;
+            if (d.high > h) h = d.high;
+            if (d.low < l) l = d.low;
         }
-        return { high, low };
+        return { h, l };
     };
 
-    const tenkanSlice = data.slice(-9);
-    const tenkanHL = getPeriodHighLow(tenkanSlice);
-    const tenkan = (tenkanHL.high + tenkanHL.low) / 2;
+    // Current point
+    const tenkanHL = getHL(data.slice(index - 8, index + 1));
+    const tenkan = (tenkanHL.h + tenkanHL.l) / 2;
 
-    const kijunSlice = data.slice(-26);
-    const kijunHL = getPeriodHighLow(kijunSlice);
-    const kijun = (kijunHL.high + kijunHL.low) / 2;
+    const kijunHL = getHL(data.slice(index - 25, index + 1));
+    const kijun = (kijunHL.h + kijunHL.l) / 2;
 
-    const t26_slice = data.slice(-26 - 9, -26);
-    const k26_slice = data.slice(-26 - 26, -26);
-    if (t26_slice.length < 9 || k26_slice.length < 26) {
-        throw new Error('Not enough data to calculate Senkou Span A');
-    }
-    const tenkan26 = (getPeriodHighLow(t26_slice).high + getPeriodHighLow(t26_slice).low) / 2;
-    const kijun26 = (getPeriodHighLow(k26_slice).high + getPeriodHighLow(k26_slice).low) / 2;
-    const senkouA = (tenkan26 + kijun26) / 2;
+    // Senkou Spans (offset by 26)
+    const t26 = getHL(data.slice(index - 25 - 9, index - 25 + 1));
+    const k26 = getHL(data.slice(index - 25 - 26, index - 25 + 1));
+    const spanA = (((t26.h + t26.l) / 2) + ((k26.h + k26.l) / 2)) / 2;
 
-    const b52Slice = data.slice(-52 - 26, -26);
-    if (b52Slice.length < 52) {
-        throw new Error('Not enough data to calculate Senkou Span B');
-    }
-    const b52HL = getPeriodHighLow(b52Slice);
-    const senkouB = (b52HL.high + b52HL.low) / 2;
+    const b52 = getHL(data.slice(index - 25 - 52, index - 25 + 1));
+    const spanB = (b52.h + b52.l) / 2;
 
-    const latest = data[data.length - 1];
-
-    return {
-        tenkan,
-        kijun,
-        senkouA,
-        senkouB,
-        price: latest.close,
-        date: latest.date.toISOString(),
-    };
+    return { tenkan, kijun, spanA, spanB };
 }
 
 /**
@@ -149,21 +131,26 @@ async function run() {
         console.log(`Checking ${CONFIG.ticker} for Ichimoku signals...`);
         const data = await fetchHistoricalData(CONFIG.ticker);
 
-        if (data.length < 78) {
-            console.log(`Not enough data (${data.length}/78 days).`);
+        if (data.length < 80) {
+            console.log(`Not enough data (${data.length}/80 days).`);
             return;
         }
 
-        const ichimoku = calculateIchimoku(data);
-        const { tenkan, kijun, senkouA, senkouB, price, date } = ichimoku;
+        // Calculate latest
+        const latestIdx = data.length - 1;
+        const latestIchimoku = getIchimokuAt(data, latestIdx);
+        const price = data[latestIdx].close;
+        const date = data[latestIdx].date.toISOString();
+
+        if (!latestIchimoku) throw new Error('Failed to calculate indicators');
 
         console.log(`Latest date: ${date.split('T')[0]}`);
-        console.log(`Price: $${price.toFixed(2)}`);
+        console.log(`Price: $${price.toFixed(2)} | Tenkan: ${latestIchimoku.tenkan.toFixed(2)} | Kijun: ${latestIchimoku.kijun.toFixed(2)}`);
 
         let signal = '';
-        if (tenkan > kijun && price > Math.max(senkouA, senkouB)) {
+        if (latestIchimoku.tenkan > latestIchimoku.kijun && price > Math.max(latestIchimoku.spanA, latestIchimoku.spanB)) {
             signal = 'BUY';
-        } else if (tenkan < kijun && price < Math.min(senkouA, senkouB)) {
+        } else if (latestIchimoku.tenkan < latestIchimoku.kijun && price < Math.min(latestIchimoku.spanA, latestIchimoku.spanB)) {
             signal = 'SELL';
         }
 
@@ -177,45 +164,55 @@ async function run() {
             }
         }
 
-        // --- Persistent Signal History for Charting ---
+        // --- Persistent Signal History ---
         const historyData = JSON.parse(fs.existsSync(CONFIG.historyPath) ? fs.readFileSync(CONFIG.historyPath, 'utf8') : '{}');
         const signalsArray = Object.keys(historyData).map(key => {
             const parts = key.split('-');
             const type = parts[0];
-            const d = parts.slice(1).join('-'); // Recombine YYYY-MM-DD
-            return { type, date: d };
+            const dStr = parts.slice(1).join('-');
+            return { type, date: dStr };
         });
 
-        // Prepare data for website
+        // Prepare chart range (last 40 points)
+        const displayHistory = data.slice(-40).map((d, i) => {
+            const absIdx = data.length - 40 + i;
+            const indicators = getIchimokuAt(data, absIdx);
+            return {
+                date: d.date.toISOString().split('T')[0],
+                open: d.open,
+                high: d.high,
+                low: d.low,
+                close: d.close,
+                price: d.close,
+                tenkan: indicators?.tenkan || null,
+                kijun: indicators?.kijun || null,
+                spanA: indicators?.spanA || null,
+                spanB: indicators?.spanB || null
+            };
+        });
+
         const websiteData = {
             ticker: CONFIG.ticker,
             price: price,
             date: date,
             signal: signal || 'NEUTRAL',
             signalHistory: signalsArray,
-            ichimoku: { tenkan, kijun, senkouA, senkouB },
-            history: data.slice(-40).map(d => ({
-                date: d.date.toISOString().split('T')[0],
-                open: d.open,
-                high: d.high,
-                low: d.low,
-                close: d.close,
-                price: d.close
-            }))
+            ichimoku: {
+                tenkan: latestIchimoku.tenkan,
+                kijun: latestIchimoku.kijun,
+                senkouA: latestIchimoku.spanA,
+                senkouB: latestIchimoku.spanB
+            },
+            history: displayHistory
         };
 
-        // Ensure the website directory exists
         const dir = path.dirname(CONFIG.websiteDataPath);
-        if (!fs.existsSync(dir)) {
-            console.log(`Creating directory: ${dir}`);
-            fs.mkdirSync(dir, { recursive: true });
-        }
-
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(CONFIG.websiteDataPath, JSON.stringify(websiteData, null, 2));
-        console.log(`Updated website data at ${CONFIG.websiteDataPath}`);
+        console.log(`Updated website data with full indicator history.`);
 
     } catch (error) {
-        console.error('Critical Error:', error.message);
+        console.error('Error in Gold Tracker execution:', error.message);
         process.exit(1);
     }
 }
