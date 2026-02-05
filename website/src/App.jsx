@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -9,41 +9,35 @@ const formatVal = (val) => {
   return Number(val).toFixed(2);
 };
 
-// Proper Candlestick using yAxis scale
-const CandlestickShape = (props) => {
-  const { cx, cy, payload, yAxis } = props;
-  if (!payload || cx === undefined || !yAxis) return null;
+// Improved Candlestick with better pixel estimation
+const CandlestickDot = ({ cx, cy, payload, index, dataSet }) => {
+  if (!payload || cx === undefined || cy === undefined) return null;
   if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
 
   const { open, close, high, low } = payload;
   const isUp = close >= open;
   const color = isUp ? '#00ff88' : '#ff4d4d';
 
-  // Use the Y-axis scale function for accurate positioning
-  const scale = yAxis.scale;
-  const yHigh = scale(high);
-  const yLow = scale(low);
-  const yOpen = scale(open);
-  const yClose = scale(close);
+  // Better pixel estimation using global price range
+  // Chart height is approximately 380px (450 - margins)
+  // We need to calculate pixels per dollar based on visible range
+  const chartHeight = 380;
+  const visiblePriceRange = dataSet.priceRange || 100; // fallback
+  const pixelsPerDollar = chartHeight / visiblePriceRange;
 
-  const bodyTop = Math.min(yOpen, yClose);
-  const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+  // Calculate Y positions relative to close price (which is at cy)
+  const yHigh = cy - (high - close) * pixelsPerDollar;
+  const yLow = cy + (close - low) * pixelsPerDollar;
+  const yOpen = cy + (close - open) * pixelsPerDollar;
+
+  const bodyTop = Math.min(cy, yOpen);
+  const bodyHeight = Math.max(2, Math.abs(cy - yOpen));
   const barWidth = 10;
 
   return (
-    <g>
-      {/* Wick from high to low */}
+    <g key={`candle-${index}`}>
       <line x1={cx} y1={yHigh} x2={cx} y2={yLow} stroke={color} strokeWidth={1.5} />
-      {/* Body from open to close */}
-      <rect
-        x={cx - barWidth / 2}
-        y={bodyTop}
-        width={barWidth}
-        height={bodyHeight}
-        fill={color}
-        stroke={color}
-        strokeWidth={1}
-      />
+      <rect x={cx - barWidth / 2} y={bodyTop} width={barWidth} height={bodyHeight} fill={color} stroke={color} />
     </g>
   );
 };
@@ -72,6 +66,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [ichimoku, setIchimoku] = useState(null);
+  const [priceRange, setPriceRange] = useState({ min: 0, max: 0, range: 100 });
 
   useEffect(() => {
     fetchRealData();
@@ -102,6 +97,19 @@ function App() {
           signalType: signal ? (signal.type || signal.signal) : null
         };
       });
+
+      // Calculate actual price range for the dataset
+      let min = Infinity;
+      let max = -Infinity;
+      history.forEach(d => {
+        const values = [d.low, d.high, d.tenkan, d.kijun, d.spanA, d.spanB].filter(v => v != null);
+        values.forEach(v => {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        });
+      });
+      const range = max - min;
+      setPriceRange({ min, max, range });
 
       setData(history);
       setCurrentPrice(jsonData.price || 0);
@@ -168,25 +176,28 @@ function App() {
 
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={9} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={50} />
-              <YAxis yAxisId="price" stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
+              <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
               <Tooltip content={<CustomTooltip />} />
 
               {/* Cloud fill */}
-              <Line yAxisId="price" type="monotone" dataKey="cloudMax" stroke="transparent" fill="url(#cloudFill)" isAnimationActive={false} dot={false} />
-              <Line yAxisId="price" type="monotone" dataKey="cloudMin" stroke="transparent" fill="url(#cloudFill)" fillOpacity={0} isAnimationActive={false} dot={false} />
+              <Line type="monotone" dataKey="cloudMax" stroke="transparent" fill="url(#cloudFill)" isAnimationActive={false} dot={false} />
+              <Line type="monotone" dataKey="cloudMin" stroke="transparent" fill="url(#cloudFill)" fillOpacity={0} isAnimationActive={false} dot={false} />
 
               {/* Ichimoku lines */}
-              <Line yAxisId="price" type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
 
-              {/* Candlesticks with accurate Y-axis positioning */}
-              <Scatter
-                yAxisId="price"
-                data={data}
-                shape={<CandlestickShape />}
+              {/* Candlesticks with improved calculation */}
+              <Line
+                type="monotone"
+                dataKey="close"
+                stroke="transparent"
+                strokeWidth={0}
+                dot={(props) => <CandlestickDot {...props} dataSet={priceRange} />}
                 isAnimationActive={false}
+                legendType="none"
               />
             </ComposedChart>
           </ResponsiveContainer>
