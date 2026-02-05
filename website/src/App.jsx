@@ -14,8 +14,9 @@ const CandlestickDot = ({ cx, cy, payload, index, dataSet }) => {
   if (!payload || cx === undefined || cy === undefined) return null;
   if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
 
-  const { open, close, high, low } = payload;
-  const isUp = close >= open;
+  const { open, close, high, low, prevClose } = payload;
+  // Green if close is higher than previous day's close, red otherwise
+  const isUp = prevClose != null ? (close >= prevClose) : (close >= open);
   const color = isUp ? '#00ff88' : '#ff4d4d';
 
   // Better pixel estimation using global price range
@@ -80,14 +81,16 @@ function App() {
       if (!response.ok) throw new Error('Data unavailable');
       const jsonData = await response.json();
 
-      const history = (jsonData.history || []).map(day => {
+      const history = (jsonData.history || []).map((day, idx) => {
         const signal = (jsonData.signalHistory || []).find(s => s.date?.split('T')[0] === day.date?.split('T')[0]);
+        const prevClose = idx > 0 ? jsonData.history[idx - 1].close : null;
         return {
           date: day.date?.split('T')[0] || day.date,
           open: day.open,
           close: day.close,
           high: day.high,
           low: day.low,
+          prevClose: prevClose,
           tenkan: day.tenkan,
           kijun: day.kijun,
           spanA: day.spanA,
