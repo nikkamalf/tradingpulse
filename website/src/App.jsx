@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, Bar, Cell } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ReferenceArea } from 'recharts';
 import { Activity, ShieldCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -8,6 +8,57 @@ const GLD_TICKER = 'GLD';
 const formatVal = (val) => {
   if (val === undefined || val === null || isNaN(val)) return '0.00';
   return Number(val).toFixed(2);
+};
+
+// Custom layer to render candlesticks
+const CandlestickLayer = ({ data, xScale, yScale, width, height }) => {
+  if (!data || data.length === 0 || !xScale || !yScale) return null;
+
+  const dataPoints = data.filter(d => d.open && d.close && d.high && d.low);
+  const barWidth = Math.max(2, Math.min(10, (width / dataPoints.length) * 0.7));
+
+  return (
+    <g className="candlesticks">
+      {dataPoints.map((item, index) => {
+        const x = xScale(item.date);
+        const yHigh = yScale(item.high);
+        const yLow = yScale(item.low);
+        const yOpen = yScale(item.open);
+        const yClose = yScale(item.close);
+
+        const isUp = item.close >= item.open;
+        const color = isUp ? '#00ff88' : '#ff4d4d';
+
+        const bodyTop = Math.min(yOpen, yClose);
+        const bodyBottom = Math.max(yOpen, yClose);
+        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+
+        return (
+          <g key={`candle-${index}`}>
+            {/* Wick */}
+            <line
+              x1={x}
+              y1={yHigh}
+              x2={x}
+              y2={yLow}
+              stroke={color}
+              strokeWidth={1}
+            />
+            {/* Body */}
+            <rect
+              x={x - barWidth / 2}
+              y={bodyTop}
+              width={barWidth}
+              height={bodyHeight}
+              fill={color}
+              stroke={color}
+              strokeWidth={1}
+            />
+          </g>
+        );
+      })}
+    </g>
+  );
 };
 
 // Clean tooltip
@@ -54,7 +105,7 @@ function App() {
       if (!response.ok) throw new Error('Data unavailable');
       const jsonData = await response.json();
 
-      // Process history data for candlestick visualization
+      // Process history data
       const history = (jsonData.history || []).map(day => {
         const signal = (jsonData.signalHistory || []).find(s => {
           const sDate = s.date?.split('T')[0];
@@ -62,11 +113,9 @@ function App() {
           return sDate === dDate;
         });
 
-        // For candlestick using Bar stacking
-        const bodyLow = Math.min(day.open, day.close);
-        const bodyHigh = Math.max(day.open, day.close);
-        const wickLow = day.low;
-        const wickHigh = day.high;
+        // Calculate cloud base (the lower of the two span values)
+        const cloudBase = Math.min(day.spanA || 0, day.spanB || 0);
+        const cloudTop = Math.max(day.spanA || 0, day.spanB || 0);
 
         return {
           date: day.date?.split('T')[0] || day.date,
@@ -74,17 +123,12 @@ function App() {
           close: day.close,
           high: day.high,
           low: day.low,
-          // Candlestick parts
-          wickBottom: wickLow,
-          wickHeight: wickHigh - wickLow,
-          bodyBottom: bodyLow,
-          bodyHeight: bodyHigh - bodyLow,
-          isUp: day.close >= day.open,
-          // Ichimoku
           tenkan: day.tenkan,
           kijun: day.kijun,
           spanA: day.spanA,
           spanB: day.spanB,
+          cloudBase: cloudBase,
+          cloudTop: cloudTop,
           signalType: signal ? (signal.type || signal.signal) : null
         };
       });
@@ -145,6 +189,13 @@ function App() {
           <h3 style={{ marginBottom: '1.5rem', marginLeft: '2rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '2px' }}>Technical Chart Analysis</h3>
           <ResponsiveContainer width="100%" height={450}>
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+              <defs>
+                <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#00ff88" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#00ff88" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -156,6 +207,7 @@ function App() {
                 minTickGap={50}
               />
               <YAxis
+                yAxisId="price"
                 stroke="rgba(255,255,255,0.3)"
                 fontSize={10}
                 axisLine={false}
@@ -165,26 +217,28 @@ function App() {
               />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Ichimoku Cloud - fill between spanA and spanB */}
+              {/* Ichimoku Cloud - properly filled between the two boundary lines */}
               <Area
+                yAxisId="price"
                 type="monotone"
-                dataKey="spanA"
+                dataKey="cloudTop"
                 stroke="transparent"
-                fill="#00ff88"
-                fillOpacity={0.12}
+                fill="url(#cloudGradient)"
                 isAnimationActive={false}
               />
               <Area
+                yAxisId="price"
                 type="monotone"
-                dataKey="spanB"
+                dataKey="cloudBase"
                 stroke="transparent"
-                fill="#00ff88"
+                fill="url(#cloudGradient)"
                 fillOpacity={0}
                 isAnimationActive={false}
               />
 
               {/* Ichimoku Lines */}
               <Line
+                yAxisId="price"
                 type="monotone"
                 dataKey="tenkan"
                 stroke="#40E0D0"
@@ -193,6 +247,7 @@ function App() {
                 isAnimationActive={false}
               />
               <Line
+                yAxisId="price"
                 type="monotone"
                 dataKey="kijun"
                 stroke="#DC143C"
@@ -201,6 +256,7 @@ function App() {
                 isAnimationActive={false}
               />
               <Line
+                yAxisId="price"
                 type="monotone"
                 dataKey="spanA"
                 stroke="#2E8B57"
@@ -209,6 +265,7 @@ function App() {
                 isAnimationActive={false}
               />
               <Line
+                yAxisId="price"
                 type="monotone"
                 dataKey="spanB"
                 stroke="#8B4513"
@@ -217,26 +274,18 @@ function App() {
                 isAnimationActive={false}
               />
 
-              {/* Candlesticks using Bars - Wicks (thin line from low to high) */}
-              <Bar dataKey="wickHeight" stackId="candle" barSize={1} isAnimationActive={false}>
-                {data.map((entry, index) => (
-                  <Cell key={`wick-${index}`} fill={entry.isUp ? '#00ff88' : '#ff4d4d'} />
-                ))}
-              </Bar>
-
-              {/* Candlesticks - Bodies (thicker bar from open to close) */}
-              <Bar dataKey="bodyHeight" stackId="candle" barSize={10} isAnimationActive={false}>
-                {data.map((entry, index) => (
-                  <Cell key={`body-${index}`} fill={entry.isUp ? '#00ff88' : '#ff4d4d'} />
-                ))}
-              </Bar>
-
-              <defs>
-                <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#d4af37" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#d4af37" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+              {/* Render candlesticks using customized content */}
+              <customized
+                component={(props) => (
+                  <CandlestickLayer
+                    data={data}
+                    xScale={props.xAxisMap?.date?.scale}
+                    yScale={props.yAxisMap?.price?.scale}
+                    width={props.width}
+                    height={props.height}
+                  />
+                )}
+              />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
