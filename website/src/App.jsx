@@ -199,58 +199,63 @@ function App() {
                 stroke="transparent"
                 isAnimationActive={false}
               />
-
-              {/* Candlesticks */}
-              <Scatter
-                data={data}
-                dataKey="close"
-                shape={<Candlestick />}
+              {/* Ichimoku Cloud (Kumo) - filled area between Span A and Span B */}
+              <Area
+                type="monotone"
+                dataKey="spanA"
+                stroke="transparent"
+                fill="#00ff88"
+                fillOpacity={0.1}
                 isAnimationActive={false}
-              />    {/* Ichimoku lines */}
+              />
+              <Area
+                type="monotone"
+                dataKey="spanB"
+                stroke="transparent"
+                fill="#00ff88"
+                fillOpacity={0.05}
+                isAnimationActive={false}
+              />
+
+              {/* Ichimoku Lines */}
               <Line
                 type="monotone"
                 dataKey="tenkan"
-                stroke="#00d2ff"
-                strokeWidth={2}
+                stroke="#40E0D0"
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
               />
               <Line
                 type="monotone"
                 dataKey="kijun"
-                stroke="#ff00ff"
-                strokeWidth={2}
+                stroke="#DC143C"
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
               />
               <Line
                 type="monotone"
                 dataKey="spanA"
-                stroke="#00ff88"
+                stroke="#2E8B57"
                 strokeWidth={1}
                 dot={false}
-                strokeDasharray="4 4"
-                strokeOpacity={0.4}
                 isAnimationActive={false}
               />
               <Line
                 type="monotone"
                 dataKey="spanB"
-                stroke="#ff4d4d"
+                stroke="#8B4513"
                 strokeWidth={1}
                 dot={false}
-                strokeDasharray="4 4"
-                strokeOpacity={0.4}
                 isAnimationActive={false}
               />
 
-              {/* Price line with emphasis */}
-              <Line
-                type="monotone"
+              {/* Candlesticks - rendered last so they're on top */}
+              <Scatter
+                data={data}
                 dataKey="close"
-                stroke="#d4af37"
-                strokeWidth={3}
-                dot={false}
+                shape={<Candlestick />}
                 isAnimationActive={false}
               />
 
