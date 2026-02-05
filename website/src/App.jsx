@@ -10,29 +10,40 @@ const formatVal = (val) => {
   return Number(val).toFixed(2);
 };
 
-// Custom Candlestick rendering using a custom dot on the Line chart
-const CandlestickDot = (props) => {
-  const { cx, cy, payload } = props;
-  if (!payload || cx === undefined) return null;
+// Custom Candlestick shape for Scatter plot
+const Candlestick = (props) => {
+  const { cx, cy, payload, yAxis } = props;
+  if (!payload || cx === undefined || !yAxis) return null;
 
   const { open, close, high, low } = payload;
   const isUp = close >= open;
   const color = isUp ? '#00ff88' : '#ff4d4d';
 
-  // Calculate approximate pixel scale (this is a hack but works for most cases)
-  // We'll draw a simple representation
-  const bodyTop = Math.min(open, close);
-  const bodyBottom = Math.max(open, close);
-  const bodyHeight = Math.abs(close - open);
+  // Use the yAxis scale to convert price to pixels
+  const scale = yAxis.scale;
+  const highY = scale(high);
+  const lowY = scale(low);
+  const openY = scale(open);
+  const closeY = scale(close);
 
-  // For this to work we'd need the Y scale, so let's use a simpler approach
-  // Just draw a vertical line with a thicker middle section
+  const bodyTop = Math.min(openY, closeY);
+  const bodyBottom = Math.max(openY, closeY);
+  const bodyHeight = Math.abs(closeY - openY);
+
   return (
     <g>
-      {/* Wick - from high to low */}
-      <line x1={cx} y1={cy - 20} x2={cx} y2={cy + 20} stroke={color} strokeWidth={1} opacity={0.6} />
-      {/* Body - thicker section */}
-      <rect x={cx - 3} y={cy - 5} width={6} height={10} fill={color} />
+      {/* Wick */}
+      <line x1={cx} y1={highY} x2={cx} y2={lowY} stroke={color} strokeWidth={1} />
+      {/* Body */}
+      <rect
+        x={cx - 4}
+        y={bodyTop}
+        width={8}
+        height={Math.max(1, bodyHeight)}
+        fill={color}
+        stroke={color}
+        strokeWidth={1}
+      />
     </g>
   );
 };
@@ -156,8 +167,8 @@ function App() {
       </div>
 
       {data.length > 0 && (
-        <div className="chart-container" style={{ padding: '2rem 0' }}>
-          <h3 style={{ marginBottom: '1.5rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '2px' }}>Technical Chart Analysis</h3>
+        <div className="chart-container" style={{ padding: '2rem 1rem' }}>
+          <h3 style={{ marginBottom: '1.5rem', marginLeft: '2rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '2px' }}>Technical Chart Analysis</h3>
           <ResponsiveContainer width="100%" height={450}>
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -189,7 +200,13 @@ function App() {
                 isAnimationActive={false}
               />
 
-              {/* Ichimoku lines */}
+              {/* Candlesticks */}
+              <Scatter
+                data={data}
+                dataKey="close"
+                shape={<Candlestick />}
+                isAnimationActive={false}
+              />    {/* Ichimoku lines */}
               <Line
                 type="monotone"
                 dataKey="tenkan"
