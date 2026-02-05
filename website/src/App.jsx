@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -9,58 +9,31 @@ const formatVal = (val) => {
   return Number(val).toFixed(2);
 };
 
-// Ichimoku Cloud - fills between spanA and spanB
-const IchimokuCloud = ({ data, xAxisMap, yAxisMap }) => {
-  if (!data || !xAxisMap || !yAxisMap) return null;
-  const xScale = xAxisMap['date']?.scale;
-  const yScale = yAxisMap['price']?.scale;
-  if (!xScale || !yScale) return null;
+// Custom Candlestick Dot that actually works
+const CandlestickDot = ({ cx, cy, payload, dataKey }) => {
+  if (!payload || cx === undefined || cy === undefined) return null;
+  if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
 
-  const validData = data.filter(d => d.spanA != null && d.spanB != null);
-  if (validData.length < 2) return null;
+  const { open, close, high, low } = payload;
+  const isUp = close >= open;
+  const color = isUp ? '#00ff88' : '#ff4d4d';
 
-  let pathData = `M ${xScale(validData[0].date)} ${yScale(validData[0].spanA)}`;
-  for (let i = 1; i < validData.length; i++) {
-    pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanA)}`;
-  }
-  for (let i = validData.length - 1; i >= 0; i--) {
-    pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanB)}`;
-  }
-  pathData += ' Z';
+  // Rough pixel estimation based on price differences
+  const priceRange = Math.max(high - low, 1);
+  const pixelsPerDollar = 50 / priceRange; // approximate
 
-  return <path d={pathData} fill="#00ff88" fillOpacity={0.12} stroke="none" />;
-};
+  const yHigh = cy - (high - close) * pixelsPerDollar;
+  const yLow = cy + (close - low) * pixelsPerDollar;
+  const yOpen = cy + (close - open) * pixelsPerDollar;
 
-// Candlesticks renderer
-const Candlesticks = ({ data, xAxisMap, yAxisMap, width }) => {
-  if (!data || !xAxisMap || !yAxisMap) return null;
-  const xScale = xAxisMap['date']?.scale;
-  const yScale = yAxisMap['price']?.scale;
-  if (!xScale || !yScale) return null;
-
-  const validData = data.filter(d => d.open && d.close && d.high && d.low);
-  const barWidth = Math.max(4, Math.min(12, (width / validData.length) * 0.7));
+  const bodyTop = Math.min(cy, yOpen);
+  const bodyHeight = Math.max(2, Math.abs(cy - yOpen));
+  const barWidth = 10;
 
   return (
     <g>
-      {validData.map((item, idx) => {
-        const x = xScale(item.date);
-        const yH = yScale(item.high);
-        const yL = yScale(item.low);
-        const yO = yScale(item.open);
-        const yC = yScale(item.close);
-        const up = item.close >= item.open;
-        const color = up ? '#00ff88' : '#ff4d4d';
-        const bodyTop = Math.min(yO, yC);
-        const bodyH = Math.max(1, Math.abs(yC - yO));
-
-        return (
-          <g key={`c-${idx}`}>
-            <line x1={x} y1={yH} x2={x} y2={yL} stroke={color} strokeWidth={1} />
-            <rect x={x - barWidth / 2} y={bodyTop} width={barWidth} height={bodyH} fill={color} />
-          </g>
-        );
-      })}
+      <line x1={cx} y1={yHigh} x2={cx} y2={yLow} stroke={color} strokeWidth={1.5} />
+      <rect x={cx - barWidth / 2} y={bodyTop} width={barWidth} height={bodyHeight} fill={color} stroke={color} />
     </g>
   );
 };
@@ -114,6 +87,8 @@ function App() {
           kijun: day.kijun,
           spanA: day.spanA,
           spanB: day.spanB,
+          cloudMin: Math.min(day.spanA || 0, day.spanB || 0),
+          cloudMax: Math.max(day.spanA || 0, day.spanB || 0),
           signalType: signal ? (signal.type || signal.signal) : null
         };
       });
@@ -174,33 +149,47 @@ function App() {
           <h3 style={{ marginBottom: '1.5rem', marginLeft: '2rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '2px' }}>Technical Chart Analysis</h3>
           <ResponsiveContainer width="100%" height={450}>
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+              <defs>
+                <linearGradient id="cloudFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#00ff88" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#00ff88" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={9} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={50} />
-              <YAxis yAxisId="price" stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
+              <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Cloud between spanA and spanB */}
-              <Customized component={(props) => <IchimokuCloud {...props} data={data} />} />
+              {/* Cloud fill - using two Lines to create filled area */}
+              <Line type="monotone" dataKey="cloudMax" stroke="transparent" fill="url(#cloudFill)" isAnimationActive={false} dot={false} />
+              <Line type="monotone" dataKey="cloudMin" stroke="transparent" fill="url(#cloudFill)" fillOpacity={0} isAnimationActive={false} dot={false} />
 
               {/* Ichimoku indicator lines */}
-              <Line yAxisId="price" type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
-              <Line yAxisId="price" type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
 
-              {/* Candlesticks on top */}
-              <Customized component={(props) => <Candlesticks {...props} data={data} />} />
+              {/* Candlesticks - using Line with custom dots */}
+              <Line
+                type="monotone"
+                dataKey="close"
+                stroke="transparent"
+                strokeWidth={0}
+                dot={<CandlestickDot />}
+                isAnimationActive={false}
+                legendType="none"
+              />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      <footer style={{
-        marginTop: '2rem', textAlign: 'center', opacity: 0.25, fontSize: '0.65rem'
-      }}>
+      <footer style={{ marginTop: '2rem', textAlign: 'center', opacity: 0.25, fontSize: '0.65rem' }}>
         <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
-      </footer >
-    </div >
+      </footer>
+    </div>
   );
 }
 
