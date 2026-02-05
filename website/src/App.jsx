@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ReferenceArea } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Bar, Cell, Customized } from 'recharts';
 import { Activity, ShieldCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -10,16 +10,69 @@ const formatVal = (val) => {
   return Number(val).toFixed(2);
 };
 
-// Custom layer to render candlesticks
-const CandlestickLayer = ({ data, xScale, yScale, width, height }) => {
-  if (!data || data.length === 0 || !xScale || !yScale) return null;
+// Custom Ichimoku Cloud renderer
+const IchimokuCloud = ({ data, xAxisMap, yAxisMap }) => {
+  if (!data || !xAxisMap || !yAxisMap) return null;
 
-  const dataPoints = data.filter(d => d.open && d.close && d.high && d.low);
-  const barWidth = Math.max(2, Math.min(10, (width / dataPoints.length) * 0.7));
+  const xScale = xAxisMap['date']?.scale;
+  const yScale = yAxisMap['price']?.scale;
+  if (!xScale || !yScale) return null;
+
+  // Create path for cloud fill
+  let pathData = '';
+  const validData = data.filter(d => d.spanA != null && d.spanB != null);
+
+  if (validData.length < 2) return null;
+
+  // Start from first point at spanA
+  pathData = `M ${xScale(validData[0].date)} ${yScale(validData[0].spanA)}`;
+
+  // Draw line along spanA
+  for (let i = 1; i < validData.length; i++) {
+    pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanA)}`;
+  }
+
+  // Draw line back along spanB in reverse
+  for (let i = validData.length - 1; i >= 0; i--) {
+    pathData += ` L ${xScale(validData[i].date)} ${yScale(validData[i].spanB)}`;
+  }
+
+  pathData += ' Z'; // Close the path
+
+  return (
+    <path
+      d={pathData}
+      fill="#00ff88"
+      fillOpacity={0.12}
+      stroke="none"
+    />
+  );
+};
+
+// Custom Candlestick shape for Bar chart
+const CandlestickShape = (props) => {
+  const { x, y, width, height, payload } = props;
+  if (!payload || !payload.open || !payload.close) return null;
+
+  // This won't work as expected because Bar doesn't give us the right coordinates
+  // We need a different approach
+  return null;
+};
+
+// Custom Candlestick renderer
+const CandlestickRenderer = ({ data, xAxisMap, yAxisMap, width }) => {
+  if (!data || !xAxisMap || !yAxisMap) return null;
+
+  const xScale = xAxisMap['date']?.scale;
+  const yScale = yAxisMap['price']?.scale;
+  if (!xScale || !yScale) return null;
+
+  const validData = data.filter(d => d.open && d.close && d.high && d.low);
+  const barWidth = Math.max(3, Math.min(12, (width / validData.length) * 0.6));
 
   return (
     <g className="candlesticks">
-      {dataPoints.map((item, index) => {
+      {validData.map((item, index) => {
         const x = xScale(item.date);
         const yHigh = yScale(item.high);
         const yLow = yScale(item.low);
@@ -30,11 +83,10 @@ const CandlestickLayer = ({ data, xScale, yScale, width, height }) => {
         const color = isUp ? '#00ff88' : '#ff4d4d';
 
         const bodyTop = Math.min(yOpen, yClose);
-        const bodyBottom = Math.max(yOpen, yClose);
         const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
 
         return (
-          <g key={`candle-${index}`}>
+          <g key={`candle-${index}-${item.date}`}>
             {/* Wick */}
             <line
               x1={x}
@@ -113,10 +165,6 @@ function App() {
           return sDate === dDate;
         });
 
-        // Calculate cloud base (the lower of the two span values)
-        const cloudBase = Math.min(day.spanA || 0, day.spanB || 0);
-        const cloudTop = Math.max(day.spanA || 0, day.spanB || 0);
-
         return {
           date: day.date?.split('T')[0] || day.date,
           open: day.open,
@@ -127,8 +175,6 @@ function App() {
           kijun: day.kijun,
           spanA: day.spanA,
           spanB: day.spanB,
-          cloudBase: cloudBase,
-          cloudTop: cloudTop,
           signalType: signal ? (signal.type || signal.signal) : null
         };
       });
@@ -189,13 +235,6 @@ function App() {
           <h3 style={{ marginBottom: '1.5rem', marginLeft: '2rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '2px' }}>Technical Chart Analysis</h3>
           <ResponsiveContainer width="100%" height={450}>
             <ComposedChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-              <defs>
-                <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00ff88" stopOpacity={0.15} />
-                  <stop offset="100%" stopColor="#00ff88" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -217,24 +256,8 @@ function App() {
               />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Ichimoku Cloud - properly filled between the two boundary lines */}
-              <Area
-                yAxisId="price"
-                type="monotone"
-                dataKey="cloudTop"
-                stroke="transparent"
-                fill="url(#cloudGradient)"
-                isAnimationActive={false}
-              />
-              <Area
-                yAxisId="price"
-                type="monotone"
-                dataKey="cloudBase"
-                stroke="transparent"
-                fill="url(#cloudGradient)"
-                fillOpacity={0}
-                isAnimationActive={false}
-              />
+              {/* Render Ichimoku Cloud first (background layer) */}
+              <Customized component={(props) => <IchimokuCloud {...props} data={data} />} />
 
               {/* Ichimoku Lines */}
               <Line
@@ -274,18 +297,8 @@ function App() {
                 isAnimationActive={false}
               />
 
-              {/* Render candlesticks using customized content */}
-              <customized
-                component={(props) => (
-                  <CandlestickLayer
-                    data={data}
-                    xScale={props.xAxisMap?.date?.scale}
-                    yScale={props.yAxisMap?.price?.scale}
-                    width={props.width}
-                    height={props.height}
-                  />
-                )}
-              />
+              {/* Render candlesticks on top */}
+              <Customized component={(props) => <CandlestickRenderer {...props} data={data} />} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
