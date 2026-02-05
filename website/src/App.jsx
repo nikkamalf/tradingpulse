@@ -196,11 +196,12 @@ function App() {
       )}
 
       <footer style={{
-        marginTop: '2rem', textAlign: 'center', opacity: 0.25', fontSize: '0.65rem' }}>
-          <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
-            </footer >
-        </div >
-    );
+        marginTop: '2rem', textAlign: 'center', opacity: 0.25, fontSize: '0.65rem'
+      }}>
+        <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
+      </footer >
+    </div >
+  );
 }
 
 export default App;
