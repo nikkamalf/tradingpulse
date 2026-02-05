@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter } from 'recharts';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -9,31 +9,41 @@ const formatVal = (val) => {
   return Number(val).toFixed(2);
 };
 
-// Custom Candlestick Dot that actually works
-const CandlestickDot = ({ cx, cy, payload, dataKey }) => {
-  if (!payload || cx === undefined || cy === undefined) return null;
+// Proper Candlestick using yAxis scale
+const CandlestickShape = (props) => {
+  const { cx, cy, payload, yAxis } = props;
+  if (!payload || cx === undefined || !yAxis) return null;
   if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
 
   const { open, close, high, low } = payload;
   const isUp = close >= open;
   const color = isUp ? '#00ff88' : '#ff4d4d';
 
-  // Rough pixel estimation based on price differences
-  const priceRange = Math.max(high - low, 1);
-  const pixelsPerDollar = 50 / priceRange; // approximate
+  // Use the Y-axis scale function for accurate positioning
+  const scale = yAxis.scale;
+  const yHigh = scale(high);
+  const yLow = scale(low);
+  const yOpen = scale(open);
+  const yClose = scale(close);
 
-  const yHigh = cy - (high - close) * pixelsPerDollar;
-  const yLow = cy + (close - low) * pixelsPerDollar;
-  const yOpen = cy + (close - open) * pixelsPerDollar;
-
-  const bodyTop = Math.min(cy, yOpen);
-  const bodyHeight = Math.max(2, Math.abs(cy - yOpen));
+  const bodyTop = Math.min(yOpen, yClose);
+  const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
   const barWidth = 10;
 
   return (
     <g>
+      {/* Wick from high to low */}
       <line x1={cx} y1={yHigh} x2={cx} y2={yLow} stroke={color} strokeWidth={1.5} />
-      <rect x={cx - barWidth / 2} y={bodyTop} width={barWidth} height={bodyHeight} fill={color} stroke={color} />
+      {/* Body from open to close */}
+      <rect
+        x={cx - barWidth / 2}
+        y={bodyTop}
+        width={barWidth}
+        height={bodyHeight}
+        fill={color}
+        stroke={color}
+        strokeWidth={1}
+      />
     </g>
   );
 };
@@ -158,28 +168,25 @@ function App() {
 
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={9} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={50} />
-              <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
+              <YAxis yAxisId="price" stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Cloud fill - using two Lines to create filled area */}
-              <Line type="monotone" dataKey="cloudMax" stroke="transparent" fill="url(#cloudFill)" isAnimationActive={false} dot={false} />
-              <Line type="monotone" dataKey="cloudMin" stroke="transparent" fill="url(#cloudFill)" fillOpacity={0} isAnimationActive={false} dot={false} />
+              {/* Cloud fill */}
+              <Line yAxisId="price" type="monotone" dataKey="cloudMax" stroke="transparent" fill="url(#cloudFill)" isAnimationActive={false} dot={false} />
+              <Line yAxisId="price" type="monotone" dataKey="cloudMin" stroke="transparent" fill="url(#cloudFill)" fillOpacity={0} isAnimationActive={false} dot={false} />
 
-              {/* Ichimoku indicator lines */}
-              <Line type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
+              {/* Ichimoku lines */}
+              <Line yAxisId="price" type="monotone" dataKey="tenkan" stroke="#40E0D0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="kijun" stroke="#DC143C" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="spanA" stroke="#2E8B57" strokeWidth={1} dot={false} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="spanB" stroke="#8B4513" strokeWidth={1} dot={false} isAnimationActive={false} />
 
-              {/* Candlesticks - using Line with custom dots */}
-              <Line
-                type="monotone"
-                dataKey="close"
-                stroke="transparent"
-                strokeWidth={0}
-                dot={<CandlestickDot />}
+              {/* Candlesticks with accurate Y-axis positioning */}
+              <Scatter
+                yAxisId="price"
+                data={data}
+                shape={<CandlestickShape />}
                 isAnimationActive={false}
-                legendType="none"
               />
             </ComposedChart>
           </ResponsiveContainer>
