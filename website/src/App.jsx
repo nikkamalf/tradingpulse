@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Cell, Area } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, Area } from 'recharts';
 import { Activity, ShieldCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -9,7 +9,8 @@ const Candlestick = (props) => {
   const { x, y, width, height, low, high, open, close } = props;
   const isUp = close > open;
   const color = isUp ? '#00ff88' : '#ff4d4d';
-  const ratio = Math.abs(open - close) / Math.abs(high - low);
+
+  if (high === low) return null;
 
   return (
     <g stroke={color} strokeWidth={2}>
@@ -32,7 +33,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [ichimoku, setIchimoku] = useState(null);
-  const [signalHistory, setSignalHistory] = useState([]);
 
   useEffect(() => {
     fetchRealData();
@@ -77,19 +77,19 @@ function App() {
     const mockData = [];
     let basePrice = 250;
     for (let i = 0; i < 40; i++) {
-      const open = basePrice + (Math.random() - 0.5) * 5;
-      const close = open + (Math.random() - 0.5) * 8;
-      const high = Math.max(open, close) + Math.random() * 3;
-      const low = Math.min(open, close) - Math.random() * 3;
-      basePrice = close;
+      const o = basePrice + (Math.random() - 0.5) * 5;
+      const c = o + (Math.random() - 0.5) * 8;
+      const h = Math.max(o, c) + Math.random() * 3;
+      const l = Math.min(o, c) - Math.random() * 3;
+      basePrice = c;
 
       mockData.push({
         date: new Date(Date.now() - (40 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        price: parseFloat(close.toFixed(2))
+        open: parseFloat(o.toFixed(2)),
+        close: parseFloat(c.toFixed(2)),
+        high: parseFloat(h.toFixed(2)),
+        low: parseFloat(l.toFixed(2)),
+        price: parseFloat(c.toFixed(2))
       });
     }
     setData(mockData);
@@ -154,12 +154,8 @@ function App() {
             }} dataKey="signalY" />
 
             {/* Ichimoku Lines */}
-            {ichimoku && (
-              <>
-                <Line type="monotone" dataKey="tenkan" stroke="#00d2ff" strokeWidth={1} dot={false} strokeOpacity={0.5} />
-                <Line type="monotone" dataKey="kijun" stroke="#ff00ff" strokeWidth={1} dot={false} strokeOpacity={0.5} />
-              </>
-            )}
+            <Line type="monotone" dataKey="tenkan" stroke="#00d2ff" strokeWidth={1} dot={false} strokeOpacity={0.6} />
+            <Line type="monotone" dataKey="kijun" stroke="#ff00ff" strokeWidth={1} dot={false} strokeOpacity={0.6} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
