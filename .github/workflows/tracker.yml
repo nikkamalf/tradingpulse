@@ -2,14 +2,14 @@ name: Gold Tracker Hourly Update
 
 on:
   schedule:
-    - cron: '0 * * * *' # Run every hour on the hour
+    - cron: '*/30 * * * *' # Run every 30 minutes for better reliability
   workflow_dispatch: # Allow manual triggering
 
 jobs:
   track:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Needed for committing data updates
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
