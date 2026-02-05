@@ -72,27 +72,40 @@ function App() {
       let min = Infinity;
       let max = -Infinity;
 
+      // Use the history array directly - it already has OHLC and indicators
       const history = (jsonData.history || []).map(day => {
-        // Robust date matching (handles both YYYY-MM-DD and ISO strings)
+        // Match signals from signalHistory
         const signalAtDate = (jsonData.signalHistory || []).find(s => {
           const sDate = s.date?.split('T')[0];
           const dDate = day.date?.split('T')[0];
           return sDate === dDate;
         });
 
-        // Track extremes for chart framing
-        const p = [day.low, day.high, day.spanA, day.spanB].filter(v => v != null);
-        p.forEach(v => { if (v < min) min = v; if (v > max) max = v; });
+        // Track extremes for chart framing (including all values)
+        const values = [day.low, day.high, day.tenkan, day.kijun, day.spanA, day.spanB].filter(v => v != null && !isNaN(v));
+        values.forEach(v => {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        });
 
         return {
-          ...day,
-          bodyRange: [day.open || day.close, day.close || day.open],
-          wickRange: [day.low || day.close, day.high || day.close],
+          date: day.date,
+          open: day.open,
+          close: day.close,
+          high: day.high,
+          low: day.low,
+          tenkan: day.tenkan,
+          kijun: day.kijun,
+          spanA: day.spanA,
+          spanB: day.spanB,
+          // For Recharts Bar rendering
+          bodyRange: [day.open, day.close],
+          wickRange: [day.low, day.high],
+          // Signal markers
           signalType: signalAtDate ? (signalAtDate.type || signalAtDate.signal) : null,
-          sigY: (signalAtDate?.type || signalAtDate?.signal) === 'BUY' ? (day.low * 0.98) : (day.high * 1.02)
+          sigY: signalAtDate ? (signalAtDate.type === 'BUY' || signalAtDate.signal === 'BUY' ? day.low * 0.98 : day.high * 1.02) : null
         };
       });
-
       if (min !== Infinity) {
         setDomain([Math.floor(min * 0.96), Math.ceil(max * 1.04)]);
       }
