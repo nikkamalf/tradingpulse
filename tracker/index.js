@@ -1,3 +1,4 @@
+// Set this for environments with corporate proxy SSL interception (e.g., Netskope)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const nodemailer = require('nodemailer');
@@ -99,18 +100,15 @@ function calculateIchimoku(data) {
  */
 async function sendEmail(subject, body) {
     if (!CONFIG.user || !CONFIG.pass) {
-        console.warn('SMTP credentials missing. Skipping email notification.');
+        console.warn('SMTP credentials missing. Skipping email.');
         return;
     }
 
     const transporter = nodemailer.createTransport({
         host: CONFIG.host,
         port: CONFIG.port,
-        secure: false, // true for 465, false for 587
-        auth: {
-            user: CONFIG.user,
-            pass: CONFIG.pass,
-        },
+        secure: false,
+        auth: { user: CONFIG.user, pass: CONFIG.pass },
     });
 
     try {
@@ -123,7 +121,7 @@ async function sendEmail(subject, body) {
         });
         console.log('Message sent: %s', info.messageId);
     } catch (err) {
-        console.error('Failed to send email:', err.message);
+        console.error('Email failed:', err.message);
     }
 }
 
@@ -151,19 +149,17 @@ async function run() {
         const data = await fetchHistoricalData(CONFIG.ticker);
 
         if (data.length < 78) {
-            console.log(`Not enough historical data yet (${data.length}/78 days).`);
+            console.log(`Not enough data (${data.length}/78 days).`);
             return;
         }
 
         const ichimoku = calculateIchimoku(data);
         const { tenkan, kijun, senkouA, senkouB, price, date } = ichimoku;
 
-        console.log(`Latest data date: ${date.split('T')[0]}`);
-        console.log(`Current Price: $${price.toFixed(2)}`);
-        console.log(`Tenkan: ${tenkan.toFixed(2)} | Kijun: ${kijun.toFixed(2)}`);
+        console.log(`Latest date: ${date.split('T')[0]}`);
+        console.log(`Price: $${price.toFixed(2)} | Tenkan: ${tenkan.toFixed(2)} | Kijun: ${kijun.toFixed(2)}`);
 
         let signal = '';
-
         if (tenkan > kijun && price > Math.max(senkouA, senkouB)) {
             signal = 'BUY';
         } else if (tenkan < kijun && price < Math.min(senkouA, senkouB)) {
@@ -172,17 +168,14 @@ async function run() {
 
         if (signal) {
             if (!checkAlertHistory(signal, date)) {
-                console.log(`Generating a new ${signal} signal!`);
+                console.log(`Generating ${signal} signal!`);
                 await sendEmail(
                     `${signal} Signal Alert: ${CONFIG.ticker}`,
-                    `${signal} signal detected for ${CONFIG.ticker}.\n\n` +
-                    `Price: $${price.toFixed(2)}\nTenkan: $${tenkan.toFixed(2)}\nKijun: $${kijun.toFixed(2)}`
+                    `Ichimoku ${signal} signal detected for ${CONFIG.ticker}.\n\nPrice: $${price.toFixed(2)}`
                 );
             } else {
-                console.log(`Signal ${signal} already alerted for this date.`);
+                console.log(`Signal ${signal} already alerted.`);
             }
-        } else {
-            console.log('No signal detected based on current parameters.');
         }
 
         // Prepare data for website
@@ -191,12 +184,7 @@ async function run() {
             price: price,
             date: date,
             signal: signal || 'NEUTRAL',
-            ichimoku: {
-                tenkan,
-                kijun,
-                senkouA,
-                senkouB
-            },
+            ichimoku: { tenkan, kijun, senkouA, senkouB },
             history: data.slice(-30).map(d => ({
                 date: d.date.toISOString().split('T')[0],
                 price: d.close
@@ -206,7 +194,7 @@ async function run() {
         // Ensure the website directory exists
         const dir = path.dirname(CONFIG.websiteDataPath);
         if (!fs.existsSync(dir)) {
-            console.log(`Creating missing directory: ${dir}`);
+            console.log(`Creating directory: ${dir}`);
             fs.mkdirSync(dir, { recursive: true });
         }
 
@@ -214,10 +202,9 @@ async function run() {
         console.log(`Updated website data at ${CONFIG.websiteDataPath}`);
 
     } catch (error) {
-        console.error('Error in Gold Tracker execution:', error.message);
+        console.error('Critical Error:', error.message);
         process.exit(1);
     }
 }
 
-// Start the script
 run();
