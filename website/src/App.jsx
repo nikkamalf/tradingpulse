@@ -36,7 +36,7 @@ const CandlestickDot = ({ cx, cy, payload, index, dataSet }) => {
   const barWidth = 10;
 
   return (
-    <g key={`candle-${index}`}>
+    <g key={'candle-' + index}>
       <line x1={cx} y1={yHigh} x2={cx} y2={yLow} stroke={color} strokeWidth={1.5} />
       <rect x={cx - barWidth / 2} y={bodyTop} width={barWidth} height={bodyHeight} fill={color} stroke={color} />
     </g>
@@ -77,7 +77,7 @@ function App() {
 
   const fetchRealData = async () => {
     try {
-      const response = await fetch('/data.json');
+      const response = await fetch('/data.json?t=' + Date.now());
       if (!response.ok) throw new Error('Data unavailable');
       const jsonData = await response.json();
 
@@ -152,7 +152,7 @@ function App() {
       <div className="price-card">
         <p className="price-label">{GLD_TICKER} Spot Price</p>
         <div className="price-value"><span className="price-symbol">$</span>{formatVal(currentPrice)}</div>
-        <div className={`signal-badge signal-${(ichimoku.signal || 'neutral').toLowerCase()}`}>
+        <div className={'signal-badge signal-' + (ichimoku.signal || 'neutral').toLowerCase()}>
           {ichimoku.signal === 'BUY' ? <TrendingUp size={12} /> : (ichimoku.signal === 'SELL' ? <TrendingDown size={12} /> : <Minus size={12} />)}
           &nbsp;{ichimoku.signal || 'NEUTRAL'}
         </div>
@@ -179,7 +179,7 @@ function App() {
 
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={9} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={50} />
-              <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => `$${Math.round(v)}`} />
+              <YAxis stroke="rgba(255,255,255,0.3)" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} tickFormatter={v => '$' + Math.round(v)} />
               <Tooltip content={<CustomTooltip />} />
 
               {/* Cloud fill */}
