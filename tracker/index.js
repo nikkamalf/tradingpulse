@@ -38,11 +38,12 @@ async function fetchHistoricalData(ticker) {
         const [date, open, high, low, close, volume] = line.split(',');
         return {
             date: new Date(date),
+            open: parseFloat(open),
             high: parseFloat(high),
             low: parseFloat(low),
             close: parseFloat(close)
         };
-    }).filter(d => !isNaN(d.high) && !isNaN(d.low) && !isNaN(d.close));
+    }).filter(d => !isNaN(d.open) && !isNaN(d.high) && !isNaN(d.low) && !isNaN(d.close));
 }
 
 /**
@@ -157,7 +158,7 @@ async function run() {
         const { tenkan, kijun, senkouA, senkouB, price, date } = ichimoku;
 
         console.log(`Latest date: ${date.split('T')[0]}`);
-        console.log(`Price: $${price.toFixed(2)} | Tenkan: ${tenkan.toFixed(2)} | Kijun: ${kijun.toFixed(2)}`);
+        console.log(`Price: $${price.toFixed(2)}`);
 
         let signal = '';
         if (tenkan > kijun && price > Math.max(senkouA, senkouB)) {
@@ -168,15 +169,22 @@ async function run() {
 
         if (signal) {
             if (!checkAlertHistory(signal, date)) {
-                console.log(`Generating ${signal} signal!`);
+                console.log(`Generating a new ${signal} signal!`);
                 await sendEmail(
                     `${signal} Signal Alert: ${CONFIG.ticker}`,
                     `Ichimoku ${signal} signal detected for ${CONFIG.ticker}.\n\nPrice: $${price.toFixed(2)}`
                 );
-            } else {
-                console.log(`Signal ${signal} already alerted.`);
             }
         }
+
+        // --- Persistent Signal History for Charting ---
+        const historyData = JSON.parse(fs.existsSync(CONFIG.historyPath) ? fs.readFileSync(CONFIG.historyPath, 'utf8') : '{}');
+        const signalsArray = Object.keys(historyData).map(key => {
+            const parts = key.split('-');
+            const type = parts[0];
+            const d = parts.slice(1).join('-'); // Recombine YYYY-MM-DD
+            return { type, date: d };
+        });
 
         // Prepare data for website
         const websiteData = {
@@ -184,9 +192,14 @@ async function run() {
             price: price,
             date: date,
             signal: signal || 'NEUTRAL',
+            signalHistory: signalsArray,
             ichimoku: { tenkan, kijun, senkouA, senkouB },
-            history: data.slice(-30).map(d => ({
+            history: data.slice(-40).map(d => ({
                 date: d.date.toISOString().split('T')[0],
+                open: d.open,
+                high: d.high,
+                low: d.low,
+                close: d.close,
                 price: d.close
             }))
         };
