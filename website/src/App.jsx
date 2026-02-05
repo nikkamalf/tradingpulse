@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter, ScatterChart, ZAxis, ComposedChart, Area } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, Bar, Cell } from 'recharts';
 import { Activity, ShieldCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const GLD_TICKER = 'GLD';
@@ -8,44 +8,6 @@ const GLD_TICKER = 'GLD';
 const formatVal = (val) => {
   if (val === undefined || val === null || isNaN(val)) return '0.00';
   return Number(val).toFixed(2);
-};
-
-// Custom Candlestick shape for Scatter plot
-const Candlestick = (props) => {
-  const { cx, cy, payload, yAxis } = props;
-  if (!payload || cx === undefined || !yAxis) return null;
-
-  const { open, close, high, low } = payload;
-  const isUp = close >= open;
-  const color = isUp ? '#00ff88' : '#ff4d4d';
-
-  // Use the yAxis scale to convert price to pixels
-  const scale = yAxis.scale;
-  const highY = scale(high);
-  const lowY = scale(low);
-  const openY = scale(open);
-  const closeY = scale(close);
-
-  const bodyTop = Math.min(openY, closeY);
-  const bodyBottom = Math.max(openY, closeY);
-  const bodyHeight = Math.abs(closeY - openY);
-
-  return (
-    <g>
-      {/* Wick */}
-      <line x1={cx} y1={highY} x2={cx} y2={lowY} stroke={color} strokeWidth={1} />
-      {/* Body */}
-      <rect
-        x={cx - 4}
-        y={bodyTop}
-        width={8}
-        height={Math.max(1, bodyHeight)}
-        fill={color}
-        stroke={color}
-        strokeWidth={1}
-      />
-    </g>
-  );
 };
 
 // Clean tooltip
@@ -65,8 +27,8 @@ const CustomTooltip = ({ active, payload }) => {
           <p style={{ color: '#fff' }}>O: ${formatVal(data.open)} | C: ${formatVal(data.close)}</p>
           <p style={{ color: '#00ff88' }}>H: ${formatVal(data.high)} | <span style={{ color: '#ff4d4d' }}>L: ${formatVal(data.low)}</span></p>
           <hr style={{ margin: '0.5rem 0', border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)' }} />
-          <p style={{ color: '#00d2ff' }}>Tenkan: ${formatVal(data.tenkan)}</p>
-          <p style={{ color: '#ff00ff' }}>Kijun: ${formatVal(data.kijun)}</p>
+          <p style={{ color: '#40E0D0' }}>Tenkan: ${formatVal(data.tenkan)}</p>
+          <p style={{ color: '#DC143C' }}>Kijun: ${formatVal(data.kijun)}</p>
         </div>
       </div>
     );
@@ -92,14 +54,19 @@ function App() {
       if (!response.ok) throw new Error('Data unavailable');
       const jsonData = await response.json();
 
-      // Use history array directly - it already has all the data we need
+      // Process history data for candlestick visualization
       const history = (jsonData.history || []).map(day => {
-        // Find matching signal
         const signal = (jsonData.signalHistory || []).find(s => {
           const sDate = s.date?.split('T')[0];
           const dDate = day.date?.split('T')[0];
           return sDate === dDate;
         });
+
+        // For candlestick using Bar stacking
+        const bodyLow = Math.min(day.open, day.close);
+        const bodyHigh = Math.max(day.open, day.close);
+        const wickLow = day.low;
+        const wickHigh = day.high;
 
         return {
           date: day.date?.split('T')[0] || day.date,
@@ -107,6 +74,13 @@ function App() {
           close: day.close,
           high: day.high,
           low: day.low,
+          // Candlestick parts
+          wickBottom: wickLow,
+          wickHeight: wickHigh - wickLow,
+          bodyBottom: bodyLow,
+          bodyHeight: bodyHigh - bodyLow,
+          isUp: day.close >= day.open,
+          // Ichimoku
           tenkan: day.tenkan,
           kijun: day.kijun,
           spanA: day.spanA,
@@ -191,21 +165,13 @@ function App() {
               />
               <Tooltip content={<CustomTooltip />} />
 
-              {/* Price area for visual weight */}
-              <Area
-                type="monotone"
-                dataKey="close"
-                fill="url(#priceGradient)"
-                stroke="transparent"
-                isAnimationActive={false}
-              />
-              {/* Ichimoku Cloud (Kumo) - filled area between Span A and Span B */}
+              {/* Ichimoku Cloud - fill between spanA and spanB */}
               <Area
                 type="monotone"
                 dataKey="spanA"
                 stroke="transparent"
                 fill="#00ff88"
-                fillOpacity={0.1}
+                fillOpacity={0.12}
                 isAnimationActive={false}
               />
               <Area
@@ -213,7 +179,7 @@ function App() {
                 dataKey="spanB"
                 stroke="transparent"
                 fill="#00ff88"
-                fillOpacity={0.05}
+                fillOpacity={0}
                 isAnimationActive={false}
               />
 
@@ -251,30 +217,19 @@ function App() {
                 isAnimationActive={false}
               />
 
-              {/* Candlesticks - rendered last so they're on top */}
-              <Scatter
-                data={data}
-                dataKey="close"
-                shape={<Candlestick />}
-                isAnimationActive={false}
-              />
+              {/* Candlesticks using Bars - Wicks (thin line from low to high) */}
+              <Bar dataKey="wickHeight" stackId="candle" barSize={1} isAnimationActive={false}>
+                {data.map((entry, index) => (
+                  <Cell key={`wick-${index}`} fill={entry.isUp ? '#00ff88' : '#ff4d4d'} />
+                ))}
+              </Bar>
 
-              {/* Signal markers */}
-              <Scatter
-                data={data.filter(d => d.signalType)}
-                dataKey="close"
-                shape={(props) => {
-                  const { cx, cy, payload } = props;
-                  if (!payload) return null;
-                  if (payload.signalType === 'BUY') {
-                    return <path d="M0,6 L6,0 L12,6 L8,6 L8,12 L4,12 L4,6 Z" transform={`translate(${cx - 6},${cy - 18})`} fill="#00ff88" />;
-                  }
-                  if (payload.signalType === 'SELL') {
-                    return <path d="M0,6 L6,12 L12,6 L8,6 L8,0 L4,0 L4,6 Z" transform={`translate(${cx - 6},${cy + 6})`} fill="#ff4d4d" />;
-                  }
-                  return null;
-                }}
-              />
+              {/* Candlesticks - Bodies (thicker bar from open to close) */}
+              <Bar dataKey="bodyHeight" stackId="candle" barSize={10} isAnimationActive={false}>
+                {data.map((entry, index) => (
+                  <Cell key={`body-${index}`} fill={entry.isUp ? '#00ff88' : '#ff4d4d'} />
+                ))}
+              </Bar>
 
               <defs>
                 <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
