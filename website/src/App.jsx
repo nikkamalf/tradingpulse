@@ -79,7 +79,9 @@ function App() {
     try {
       const response = await fetch('https://raw.githubusercontent.com/nikkamalf/gold-tracker/main/website/public/data.json?t=' + Date.now());
       if (!response.ok) throw new Error('Data unavailable');
-      const jsonData = await response.json();
+
+      const textData = await response.text();
+      const jsonData = JSON.parse(textData);
 
       const history = (jsonData.history || []).map((day, idx) => {
         const signal = (jsonData.signalHistory || []).find(s => s.date?.split('T')[0] === day.date?.split('T')[0]);
