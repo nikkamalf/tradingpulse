@@ -211,6 +211,9 @@ function App() {
 
       <footer style={{ marginTop: '2rem', textAlign: 'center', opacity: 0.25, fontSize: '0.65rem' }}>
         <p>INSTITUTIONAL SIGNAL TRACKER • UPDATES HOURLY</p>
+        <p style={{ marginTop: '0.5rem', maxWidth: '300px', margin: '0.5rem auto 0', lineHeight: '1.4' }}>
+          Disclaimer: This tool is for informational purposes only and does not constitute financial advice. Market data is updated roughly every 30 minutes.
+        </p>
       </footer>
     </div>
   );
