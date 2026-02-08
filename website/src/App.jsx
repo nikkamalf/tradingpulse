@@ -145,7 +145,7 @@ function App() {
   return (
     <div className="container fade-in">
       <header className="header">
-        <div className="logo"><Activity size={18} /> GLD TRACKER</div>
+        <div className="logo"><Activity size={18} /> GoldDiggr</div>
         <div className="system-status">
           <span style={{ color: '#00ff88', fontSize: '0.7rem', fontWeight: '900' }}>● LIVE</span>
         </div>
